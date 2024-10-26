@@ -1,0 +1,18 @@
+description: |
+  Microchip MCP9808 temperature sensor
+
+compatible: "microchip,mcp9808"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+  resolution:
+    type: int
+    default: 3
+    description: |
+      Sensor resolution. Default is 0.0625°C (3).
+    enum:
+      - 0 # 0.5C
+      - 1 # 0.25C
+      - 2 # 0.125C
+      - 3 # 0.0625C

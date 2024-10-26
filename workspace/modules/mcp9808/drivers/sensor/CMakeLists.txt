@@ -1,0 +1,1 @@
+add_subdirectory_ifdef(CONFIG_MCP9808 mcp9808)

@@ -1,0 +1,6 @@
+menuconfig MCP9808
+	bool "MCP9808 Temperature Sensor"
+	default y
+	select I2C
+	help
+	  Enable driver for the MCP9808 temperature sensor.
