@@ -1,10 +1,60 @@
-# VS Code Docker Environment for Zephyr
+# Workshop: Zephyr Device Driver
 
-This is a development environment for creating Docker images with the Zephyr toolchain used to build source code for various embedded targets. You build the image for your desired toolchain, store projects in the *workspace/* directory, and then run the image whenever you want to build (e.g. `west build`) the project. Separate Dockerfiles exist for different target families (ARM, Espressif, etc.). The intention is to use this environment as your VS Code working directory, but it is usable outside of VS Code.
+Welcome to the Zephyr Device Driver workshop! By the end of this workshop, you should have a broad overview of how a device driver is written, connected to the Devicetree, and then used in a simple example application.
+
+> **Note**: Writing a device driver involves multiple tools, languages, and configuration file syntaxes. If this is your first time working with Kconfig and Devicetree, know that it will likely be overwhelming at first. This workshop will provide you with a barebones example and then point you to various resources should you wish to dive deeper into these concepts.
+
+## Table of Contents
+
+**%%%TODO**
+
+## Prerequisites
+
+You should have an understanding of the following:
+
+ * C programming langauge
+ * Embedded development (e.g. what a GPIO pin is)
+ * I<sup>2</sup>C communication
+
+The following concepts are optional but will help with your understanding of the hands-on portions of the workshop:
+
+ * Docker
+ * CMake
+ * Kconfig
+ * Devicetree
+ * YAML
+
+## Hardware Connections
+
+You will need the following hardware components:
+
+ * [ESP32-S3-DevKit-C-1](https://www.digikey.com/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N32R8V/15970965)
+ * [MCP9808 Temperature Sensor Board](https://www.digikey.com/en/products/detail/adafruit-industries-llc/1782/4990781)
+ * [LED](https://www.digikey.com/en/products/detail/w%C3%BCrth-elektronik/151051RS11000/4490012)
+ * [220 Ω Resistor](https://www.digikey.com/en/products/detail/yageo/CFR-25JB-52-220R/1295?s=N4IgTCBcDa5gDARQEIGkC0A5AIiAugL5A)
+ * [Jumper Wires](https://www.digikey.com/en/products/detail/adafruit-industries-llc/1957/6827090)
+ * [Solderless Breadboard](https://www.digikey.com/en/products/detail/dfrobot/FIT0096/7597069)
+ * [USB A to Micro B Cable](https://www.digikey.com/en/products/detail/cvilux-usa/DH-20M50055/13175849)
+
+Connect the components as follows, and connect the ESP32 dev kit to your computer.
+
+**%%%TODO: Fritzing image**
+
+## Toolchain Installation
+
+To start, download this repository somewhere on your computer (using `git` or direct download + unzip).
+
+[The Zephyr Project](https://zephyrproject.org/) is not like other IDEs or toolchains: it relies a wide collection of tools with a strong focus on Linux as the host operating system. Windows and macOS are both officially supported, but installing the toolchains on them can be burdensome.
+
+To create a unified experience for this workshop, this tutorial demonstrates everything using the [pre-made VS Code Docker image](https://github.com/ShawnHymel/vscode-env-zephyr).
+
+> **Note**: In all cases, you should mount the *workspace/* directory from this repository into the container (which we do with the `-v` argument). That gives us a place to modify/save code so that you can take it with you after the workshop.
+
+> **Warning**: I recommend deleting the container after using it (hence the `--rm` argument) to keep everything clean. Any changes in the container outside of the */workspace/* directory (which we mount from the host) **will be deleted**!
+
+(Optional) If you do not want to use Docker, you are welcome to install Zephyr manually on your host operating system by [following these instructions](https://docs.zephyrproject.org/latest/develop/getting_started/index.html). Be warned: the installation locations might affect the flow of this workshop, and you will likely spend some time correcting paths. Zephyr, by default, wants you to install all the RTOS source code and SDK toolchains inside your single, large project. This is an extremely bloated way to develop one-off, smaller projects. As a result, we'll be using something similar to their [T3: Forest topology directory structure](https://docs.zephyrproject.org/latest/develop/west/workspaces.html#t3-forest-topology).
 
 > **Note**: the instructions below were verified with Python 3.12 running on the host system. If one of the *pip install* steps fails, try installing exactly Python 3.12 and running the command again with `python3.12 -m pip install ...`
-
-## Getting Started
 
 Before you start, install the following programs on your computer:
 
@@ -15,60 +65,112 @@ Before you start, install the following programs on your computer:
 Open a terminal, navigate to this directory, and install the following dependencies:
 
 Linux/macOS:
+
 ```sh
+cd workshop-zephyr-device-driver/
 python -m venv venv
 source venv/bin/activate
-python -m pip install pyserial==3.5
+python -m pip install pyserial==3.5 esptool==4.8.1
 ```
 
 Windows:
+
 ```bat
+cd workshop-zephyr-device-driver/
 python -m venv venv
 venv\Scripts\activate
-python -m pip install pyserial==3.5
+python -m pip install pyserial==3.5 esptool==4.8.1
 ```
 
-Choose your desired target family below and follow the steps to build image and compile an example program.
-
-### Espressif (ESP32)
-
-Build the image (this will take some time):
+**Option 1**: Build the Docker image (this will take some time):
 
 ```sh
 docker build -t env-zephyr-espressif -f Dockerfile.espressif .
 ```
 
-Run the image in interactive mode:
+**Option 2**: Load a pre-made Docker image
+
+If this is an in-person workshop, I should have USB flash drives with the necessary installers and pre-made images, as conference WiFi connections can sometimes be spotty. Copy the Docker image for your architecture (`*-amd64.tar` for x86_64 processors or `*-arm64.tar` for ARM64 processors like the Mac M1, M2, etc.) to your computer (e.g. *Downloads/* directory). Run the following command to load the Docker image (where `<ARCH>` is either `amd64` or `arm64`):
+
+```sh
+cd Downloads/
+docker load -i env-zephyr-espressif-<ARCH>.tar
+```
+
+The Docker image includes all of the necessary Zephyr RTOS and SDK elements, the toolchain for building ESP32 applications, and a VS Code Server instance. As a result, you have a few options for interacting with the image: VS Code Server or Interactive Container. Choose one from below:
+
+### (Recommended) VS Code Server
+
+> **Note**: The rest of this tutorial assumes you will be using this method.
+
+Open a terminal (or command prompt), navigate to this directory and run the Docker image:
 
 Linux/macOS:
+
 ```sh
-docker run --rm -it -v $(pwd)/workspace:/workspace -w /workspace --add-host=host.docker.internal:host-gateway env-zephyr-espressif bash
+docker run --rm -it -p 8080:8080 -v "$(pwd)"/workspace:/workspace -w /workspace env-zephyr-espressif
 ```
 
 Windows:
+
 ```bat
-docker run --rm -it -v %cd%\workspace\:/workspace -w /workspace --add-host=host.docker.internal:host-gateway env-zephyr-espressif bash
+docker run --rm -it -p 8080:8080 -v "%cd%\workspace":/workspace -w /workspace env-zephyr-espressif
 ```
 
-In the container, build the project. Note that I'm using the [ESP32-S3-DevKitC](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html) as my target board. Feel free to change it to one of the [other ESP32 dev boards](https://docs.zephyrproject.org/latest/boards/index.html#vendor=espressif).
+Leave that terminal window open, as it will act as our server. Open a browser on your host OS (verified working on Chrome) and navigate to [localhost:8080](http://localhost:8080/). It should connect to the container's server, and you should be presented with a VS Code instance.
 
-```
-# cd blink
-# west build -p always -b esp32s3_devkitc/esp32s3/procpu
-# exit
-```
+### Interactive Container
 
-Connect the ESP32 board to your computer. In the terminal, activate the Python virtual environment (Linux/macOS: `source venv/bin/activate`, Windows: `venv\Scripts\activate`) if not done so already. Install the ESP flashing tool:
+If you don't want to use the VS Code server, your other option is to run an interactive container and edit your *workspace/* files locally (using your favorite editor) or in the container (using e.g. vim, nano, mcedit). To do that, override the entrypoint for the image:
+
+Linux/macOS:
 
 ```sh
-python -m pip install esptool==4.8.1 
+cd workshop-zephyr-device-driver/
+docker run --rm -it -v "$(pwd)"/workspace:/workspace -w /workspace --entrypoint /bin/bash env-zephyr-espressif
 ```
+
+Windows:
+
+```bat
+cd workshop-zephyr-device-driver/
+docker run --rm -it -v "%cd%\workspace":/workspace -w /workspace --entrypoint /bin/bash env-zephyr-espressif
+```
+
+You should be presented with a root shell prompt (`#`) in your terminal. Remember that the */workspace/* directory is shared between your host and container, so any changes to files there are reflected on both systems. You can edit files locally (with e.g. your own local VS Code) or in the container (e.g. `mcedit /workspace/apps/blink/src/main.c`).
+
+## Build and Flash the Blink Demo
+
+Before we start driver development, let's make sure we can build the basic blinky demo.
+
+> **Important!** Take note of the two directories in your VS Code instance:
+> * ***/workspace*** is the shared directory between your host and container.
+> * ***/opt/toolchains/zephyr*** is the Zephyr RTOS source code. It is for reference only and should not be modified!
+
+Open a terminal in the VS Code client and build the project. Note that I'm using the [ESP32-S3-DevKitC](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html) as my target board. Feel free to change it to one of the [other ESP32 dev boards](https://docs.zephyrproject.org/latest/boards/index.html#vendor=espressif).
+
+> **Note**: Whenever you see the root bash prompt (`#`), it means you should enter those commands into a terminal in the container (browser-based VS Code instance or root shell).
+
+```
+# cd apps/blink
+# west build -p always -b esp32s3_devkitc/esp32s3/procpu
+```
+
+With some luck, the *blink* sample should build. Pay attention to any errors you see.
+
+![Screen Blink Build](.images/screen-blink-build.png)
+
+The binary files will be in *workspace/apps/blink/build/zephyr*, which you can flash using [esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/).
+
+Connect the ESP32 board to your computer. In a new terminal on your **host computer**, activate the Python virtual environment (Linux/macOS: `source venv/bin/activate`, Windows: `venv\Scripts\activate`) if not done so already.
 
 Flash the binary to your board. For some ESP32 boards, you need to put it into bootloader by holding the *BOOTSEL* button and pressing the *RESET* button (or cycling power). Change `<PORT>` to the serial port for your ESP32 board (e.g. `/dev/ttyS0` for Linux, `/dev/tty.usbserial-1420` for macOS, `COM7` for Windows). You might also need to install a serial port driver, depending on the particular board.
 
 ```sh
-python -m esptool --port "<PORT>" --chip auto --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq 40m --flash_size detect 0x0 workspace/blink/build/zephyr/zephyr.bin
+python -m esptool --port "<PORT>" --chip auto --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq 40m --flash_size detect 0x0 workspace/apps/blink/build/zephyr/zephyr.bin
 ```
+
+![Flash ESP32 dev board](.images/screen-flash-esp32.png)
 
 Open a serial port for debugging. Change `<PORT>` to the serial port for your ESP32 board.
 
@@ -78,6 +180,22 @@ python -m serial.tools.miniterm "<PORT>" 115200
 
 You should see the LED state printed to the console. Exit with *ctrl+]* (or *cmd+]* for macOS).
 
+![Serial monitor for ESP32](.images/screen-esp32-serial.png)
+
+## Driver Source Code
+
+## Devicetree Configuration
+
+## CMake Includes
+
+## Kconfig Settings
+
+## Zephyr Module
+
+## Demo Application
+
 ## License
 
-All software in this repository, unless otherwise noted, is licensed under the [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) license.
+This tutorial (README.md) is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.en).
+
+All software in this repository, unless otherwise noted, is licensed under [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0).
