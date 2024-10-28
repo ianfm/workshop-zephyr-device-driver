@@ -16,15 +16,23 @@ You should have an understanding of the following:
  * Embedded development (e.g. what a GPIO pin is)
  * I<sup>2</sup>C communication
 
+I recommend the following guides to refresh your knowledge:
+
+ * [C structs](https://www.programiz.com/c-programming/c-structures)
+ * [C pointers](https://www.programiz.com/c-programming/c-pointers)
+ * [C macros](https://www.programiz.com/c-programming/c-preprocessor-macros)
+ * [GPIO example with Zephyr](https://michaelangerer.dev/zephyr/2021/12/21/zephyr-basics-gpio.html)
+ * [Overview of I2C](https://learn.sparkfun.com/tutorials/i2c/all)
+
 The following concepts are optional but will help with your understanding of the hands-on portions of the workshop:
 
- * Docker
- * CMake
- * Kconfig
- * Devicetree
- * YAML
+ * [Docker](https://www.digikey.com/en/maker/projects/getting-started-with-docker/aa0d4c708c274ffd975f3b427e5c0ce6)
+ * [CMake](https://www.internalpointers.com/post/modern-cmake-beginner-introduction)
+ * [Kconfig](https://docs.kernel.org/kbuild/kconfig-language.html)
+ * [Devicetree](https://docs.nordicsemi.com/bundle/ncs-1.9.2-dev1/page/zephyr/guides/dts/intro.html)
+ * [YAML](https://circleci.com/blog/what-is-yaml-a-beginner-s-guide/)
 
-## Hardware Connections
+## Hardware Setup
 
 You will need the following hardware components:
 
