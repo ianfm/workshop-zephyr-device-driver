@@ -1,3 +1,5 @@
-set(MCP9808_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE PATH "MCP9808 module root directory")
+# Include the required subdirectories
 add_subdirectory(drivers)
+
+# Add subdirectories to the compiler's include search path (.h files)
 zephyr_include_directories(drivers)

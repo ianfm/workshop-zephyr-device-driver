@@ -8,6 +8,7 @@
 
 #include "mcp9808.h"
 
+// Enable logging at a given level
 LOG_MODULE_REGISTER(MCP9808, CONFIG_SENSOR_LOG_LEVEL);
 
 //------------------------------------------------------------------------------

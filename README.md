@@ -163,7 +163,7 @@ Open a terminal in the VS Code client and build the project. Note that I'm using
 
 ```
 # cd apps/blink
-# west build -p always -b esp32s3_devkitc/esp32s3/procpu
+# west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 ```
 
 With some luck, the *blink* sample should build. Pay attention to any errors you see.
@@ -238,19 +238,442 @@ Some notes about the files and folder structure:
  * The *dts/bindings/sensor/* naming and structure matters. During the build process, Zephyr looks for bindings files (\*.yaml) recursively in *dts/bindings/* folders in its *modules*.
  * Speaking of modules, the *zephyr/module.yml* file formally declares this directory (*modules/mcp9808/*) as a Zephyr [module](https://docs.zephyrproject.org/latest/develop/modules.html) so it knows where to find the source, Kconfig, and bindings files. Once again, the folder and file name are important here: Zephyr looks for this particular file in this particular directory. It also uses the YAML syntax and must be named *module.yaml* or *module.yml*.
 
+> **Note**: The device driver used in this example is based on the existing *zephyr/drivers/sensor/jedec/jc42* driver, with the bindings file found in *zephyr\dts\bindings\sensor\jedec,jc-42.4-temp.yaml*. We drop interrupt/trigger support and pare it down to just the essentials to demonstrate how to create an *out-of-tree* driver module. 
+
+## Driver Header
+
+After setting up the directory structure, we're going to write our actual driver. Let's start with our header file.
+
+Copy the following to ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.h***:
+
+```c
+#ifndef ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
+#define ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
+
+#include <zephyr/drivers/sensor.h>
+
+// MCP9808 registers
+#define MCP9808_REG_CONFIG     0x01
+#define MCP9808_REG_TEMP_AMB   0x05
+#define MCP9808_REG_RESOLUTION 0x08
+
+// Ambient temperature register information
+#define MCP9808_TEMP_SCALE_CEL 16
+#define MCP9808_TEMP_SIGN_BIT  BIT(12)
+#define MCP9808_TEMP_ABS_MASK  0x0FFF
+
+// Sensor data
+struct mcp9808_data {
+	uint16_t reg_val;
+};
+
+// Configuration data
+struct mcp9808_config {
+	struct i2c_dt_spec i2c;
+	uint8_t resolution;
+};
+
+#endif /* ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_ */
+```
+
+There is not much here! We define some constant values and a couple of structs. The weirdest thing is the lack of public-facing functions. In most C/C++ projects, we define our API in the header file that we then `#include` in our application (or other source files). In our driver, we are going to rely on the Devicetree to define our public-facing API. We'll see how to do that in the .c file. For now, know that almost all driver functions should be private (defined as `static`) in the source (.c) file(s).
+
+We define our I2C device register addresses, as given by the [MCP9808 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/MCP9808-0.5C-Maximum-Accuracy-Digital-Temperature-Sensor-Data-Sheet-DS20005095B.pdf). The MCP9808 has a number of extra functions that we will ignore for this workshop--namely the ability to set thresholds and toggle an interrupt trigger pin. We want to focus on the simple actions of setting the *RESOLUTION* register at boot time and then reading from the *AMBIENT TEMPERATURE* register at regular intervals.
+
+The RESOLUTION register (address 0x08) uses just 2 bits to set the resolution. We'll create an *enum* in the Devicetree that allows users to set the resolution to one of the four available values. Our driver code will read the value from the Devicetree configuration and set the desired resolution in the register during boot initialization.
+
+![MCP9808 resolution register](.images/mcp9808-resolution-register.png)
+
+The AMBIENT TEMPERATURE register (address 0x05) stores temperature data in 12-bit format with an extra bit used for the sign. We'll ignore bits 13-15, as they're used for setting thresholds. This is a 16-bit register, so we'll read from the register and conver the 12-bit temperature value (plus sign bit) to a usable value in our code.
+
+![MCP9808 ambient temperature register](.images/mcp9808-temperature-register.png)
+
 ## Driver Source Code
 
-After setting up the directory structure, we're going to write our actual driver. 
+Now, copy the following code into ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.c***:
 
-## Devicetree Configuration
+```c
+// Ties to the 'compatible = "microchip,mcp9808"' node in the Devicetree
+#define DT_DRV_COMPAT microchip_mcp9808
+
+#include <errno.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/logging/log.h>
+
+#include "mcp9808.h"
+
+// Enable logging at a given level
+LOG_MODULE_REGISTER(MCP9808, CONFIG_SENSOR_LOG_LEVEL);
+
+//------------------------------------------------------------------------------
+// Forward declarations
+
+static int mcp9808_reg_read(const struct device *dev,
+							uint8_t reg,
+							uint16_t *val);
+static int mcp9808_reg_write_8bit(const struct device *dev,
+								  uint8_t reg,
+								  uint8_t val);
+static int mcp9808_init(const struct device *dev);
+static int mcp9808_sample_fetch(const struct device *dev,
+								enum sensor_channel chan);
+static int mcp9808_channel_get(const struct device *dev,
+							   enum sensor_channel chan,
+							   struct sensor_value *val);
+
+//------------------------------------------------------------------------------
+// Private functions
+
+// Read from a register (at address reg) on the device
+static int mcp9808_reg_read(const struct device *dev, 
+							uint8_t reg, 
+							uint16_t *val)
+{
+	const struct mcp9808_config *cfg = dev->config;
+
+	// Write the register address first then read from the I2C bus
+	int rc = i2c_write_read_dt(&cfg->i2c, &reg, sizeof(reg), val, sizeof(*val));
+	if (rc == 0) {
+		*val = sys_be16_to_cpu(*val);
+	}
+
+	return rc;
+}
+
+// Write to a register (at address reg) on the device
+static int mcp9808_reg_write_8bit(const struct device *dev, 
+								  uint8_t reg, 
+								  uint8_t val)
+{
+	const struct mcp9808_config *cfg = dev->config;
+
+	// Construct 2-bute message (address, value)
+	uint8_t buf[2] = {
+		reg,
+		val,
+	};
+
+	// Perform write operation
+	return i2c_write_dt(&cfg->i2c, buf, sizeof(buf));
+}
+
+// Initialize the MCP9808 (performed by kernel at boot)
+static int mcp9808_init(const struct device *dev)
+{
+	const struct mcp9808_config *cfg = dev->config;
+	int rc = 0;
+
+	// Print to console
+	LOG_DBG("Initializing");
+
+	// Check the bus is ready and there is a software handle to the device
+	if (!device_is_ready(cfg->i2c.bus)) {
+		LOG_ERR("Bus device is not ready");
+		return -ENODEV;
+	}
+
+	// Set temperature resolution (make sure we can write to the device)
+	rc = mcp9808_reg_write_8bit(dev, MCP9808_REG_RESOLUTION, cfg->resolution);
+	LOG_DBG("Setting resolution to index %d", cfg->resolution);
+	if (rc) {
+		LOG_ERR("Could not set the resolution of mcp9808 module");
+		return rc;
+	}
+
+	return rc;
+}
+
+//------------------------------------------------------------------------------
+// Public functions (API)
+
+// Read temperature value from the device and store it in the device data struct
+// Call this before calling mcp9808_channel_get()
+static int mcp9808_sample_fetch(const struct device *dev, 
+								enum sensor_channel chan)
+{
+	struct mcp9808_data *data = dev->data;
+
+	// Check if the channel is supported
+	if ((chan != SENSOR_CHAN_ALL) && (chan != SENSOR_CHAN_AMBIENT_TEMP)) {
+		LOG_ERR("Unsupported channel: %d", chan);
+		return -ENOTSUP;
+	}
+
+	// Perform the I2C read, store the data in the device data struct
+	return mcp9808_reg_read(dev, MCP9808_REG_TEMP_AMB, &data->reg_val);
+}
+
+// Get the temperature value stored in the device data struct
+// Make sure to call mcp9808_sample_fetch() to update the device data
+static int mcp9808_channel_get(const struct device *dev, 
+							   enum sensor_channel chan,
+			    			   struct sensor_value *val)
+{
+	const struct mcp9808_data *data = dev->data;
+
+	// Convert the 12-bit two's complement to a signed integer value
+	int temp = data->reg_val & MCP9808_TEMP_ABS_MASK;
+	if (data->reg_val & MCP9808_TEMP_SIGN_BIT) {
+		temp = -(1U + (temp ^ MCP9808_TEMP_ABS_MASK));
+	}
+
+	// Check if the channel is supported
+	if (chan != SENSOR_CHAN_AMBIENT_TEMP) {
+		LOG_ERR("Unsupported channel: %d", chan);
+		return -ENOTSUP;
+	}
+
+	// Store the value as integer (val1) and millionths (val2)
+	val->val1 = temp / MCP9808_TEMP_SCALE_CEL;
+	temp -= val->val1 * MCP9808_TEMP_SCALE_CEL;
+	val->val2 = (temp * 1000000) / MCP9808_TEMP_SCALE_CEL;
+
+	return 0;
+}
+
+//------------------------------------------------------------------------------
+// Devicetree handling - This is the magic that connects this driver source code
+// 	to the Devicetree so that you can use it in your application!
+
+// Define the public API functions for the driver
+static const struct sensor_driver_api mcp9808_api_funcs = {
+	.sample_fetch = mcp9808_sample_fetch,
+	.channel_get = mcp9808_channel_get,
+};
+
+// Expansion macro to define the driver instances
+// If inst is set to "42" by the Devicetree compiler, this macro creates code
+// with the unique id of "42" for the structs, e.g. mcp9808_data_42.
+#define MCP9808_DEFINE(inst)                                        		   \
+																			   \
+	/* Create an instance of the data struct */								   \
+	static struct mcp9808_data mcp9808_data_##inst;                 		   \
+                                                                    		   \
+	/* Create an instance of the config struct and populate with DT values */  \
+	static const struct mcp9808_config mcp9808_config_##inst = {			   \
+		.i2c = I2C_DT_SPEC_INST_GET(inst),                          		   \
+		.resolution = DT_INST_PROP(inst, resolution),               		   \
+	};        																   \
+                                                                    		   \
+	/* Create a "device" instance from a Devicetree node identifier and */	   \
+	/* registers the init function to run during boot. */					   \
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, 										   \
+								 mcp9808_init, 								   \
+								 NULL, 										   \
+								 &mcp9808_data_##inst,						   \
+				     			 &mcp9808_config_##inst, 					   \
+								 POST_KERNEL,                       		   \
+				     			 CONFIG_SENSOR_INIT_PRIORITY, 				   \
+								 &mcp9808_api_funcs);						   \
+
+// The Devicetree build process calls this to create an instance of structs for 
+// each device (MCP9808) defined in the Devicetree Source (DTS)
+DT_INST_FOREACH_STATUS_OKAY(MCP9808_DEFINE)
+```
+
+There is a lot going on here, so we'll discuss the code in the following subsections. 
+
+> **Note**: These discussions are quite lengthy. Feel free to skip them if you just want to get a working driver.
+
+### Compatible Driver Definition
+
+```c
+// Ties to the 'compatible = "microchip,mcp9808"' node in the Devicetree
+#define DT_DRV_COMPAT microchip_mcp9808
+```
+
+We define the *compatible* name as `microchip_mcp9808` using the `DT_DRV_COMPAT` macro, which is a special macro provided by Zephyr. Because I2C is a bus architecture, we could have multiple MCP9808 devices attached to the same bus (each with its own bus address). To handle this (without relying on object-oriented programming e.g. C++), we must create *instances* of our driver config, data, and API functions that exist separately of each other when we compile our code. Zephyr gives us a series of macros to help us create these instances.
+
+You can create non-instance driver code, but we'll rely on [Zephyr's instance-based driver macros](https://docs.zephyrproject.org/latest/build/dts/howtos.html#option-1-create-devices-using-instance-numbers) to help us handle multiple I2C devices on the same bus. To use them, you must define `DT_DRV_COMPAT` before calling the instance expansion macros (found at the bottom of the code). During the build process, Zephyr looks for *compatible* symbols in the Devicetree source (DTS) files that match the *compatible* symbols in both the *bindings* files (which we'll explore later) and in the driver source code.
+
+Note that *compatible* is almost always given as `vender,device` as a standard style in Devicetree lingo. As C macro symbols do not work with commas, the comma is converted to an underscore `_` when the build system is looking for matching source code files. In other words, if you use `compatible = "microchip,mcp9808";` in your Devicetree source, you must use `microchip_mcp9808` to define the matching driver source code macro.
+
+### Logging
+
+```c
+// Enable logging at a given level
+LOG_MODULE_REGISTER(MCP9808, CONFIG_SENSOR_LOG_LEVEL);
+```
+
+The `LOG_MODULE_REGISTER` macro enables logging (for debugging and error identification) at the module level (remember, this driver is considered a *module*). We can then use macros like `LOG_DBG` and `LOG_ERR` to print messages to the console:
+
+```c
+LOG_ERR // Print ERROR level message to the log
+LOG_WRN // Print WARNING level message to the log
+LOG_INF // Print INFO level message to the log
+LOG_DBG // Print DEBUG level message to the log
+```
+
+We can use the Kconfig system to set the log level (0-4) for our program:
+
+ 0. None
+ 1. Error
+ 2. Warning
+ 3. Info
+ 4. Debug
+
+Note that messages at and *below* the configured log level will be printed. For example, setting the log level to 2 will print all `LOG_WRN` and `LOG_ERR` messages, but it will not print `LOG_INF` and `LOG_DBG` messages.
+
+### Functions
+
+```c
+static int mcp9808_reg_read(const struct device *dev,
+							uint8_t reg,
+							uint16_t *val);
+...
+```
+
+Next, we declare our functions. Note the use gratuitous use of `static` here; we want to keep these functions *private*, which means that they can only be seen by the compiler inside this file. To illistrate how a Zephyr driver *API* works, I divided the functions into *private* and *public* sections, but notice that they are still all declared as `static`.
+
+From there, we define our functions. The register reading and writing should be familiar if you've worked with I2C devices before. If not, I recommend reading [this introduction to I2C](https://learn.sparkfun.com/tutorials/i2c/all). In these functions, we call Zephyr's I2C API to handle the low-level functions for us.
+
+> **Note**: Zephyr's I2C API offers a great layer of abstraction! We are not bound to using a specific chip or board hardware abstraction layer (HAL). Rather, Zephyr links to the necessary chip-specific HAL at build time when we specify the board (e.g. `west build -b <board>`). As a result, we can write truly device-agnostic driver code!
+
+To learn about the available I2C functions, you can either navigate to the I2C header file (*zephyr/include/zephyr/drivers/i2c.h*) or view the [API docs here](https://docs.zephyrproject.org/apidoc/latest/group__i2c__interface.html).
+
+The interesting part is that we are creating *instance-specific* functions without the use of object-oriented programming. To do that, the I2C functions expect a `i2c_dt_spec` struct as their first parameter, which holds the bus (e.g. `i2c0` or `i2c1`) and device address (e.g. `0x18` for the MCP9808). These are values that get populated from the Devicetree source, rather than from your application code. For example:
+
+```c
+int rc = i2c_write_read_dt(&cfg->i2c, &reg, sizeof(reg), val, sizeof(*val));
+```
+
+Here, we perform the common pattern of writing a register address (`reg`) out to the device (at I2C address `i2c->addr`) and then reading the value from the register, which is saved to the `val` variable.
+
+A common pattern in Zephyr is to save output values in parameters and use the return value to send a *return code* back to the caller. These codes are defined by [POSIX.1-2017](https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/) and can be found in [here in the Zephyr docs](https://docs.zephyrproject.org/apidoc/latest/group__system__errno.html).
+
+The `init` function will be registered to the kernel's boot process, and is (normally) called once prior to the application's `main()` being called.
+
+The *public functions* adhere to the [Zephyr Sensor API template](https://docs.zephyrproject.org/apidoc/latest/structsensor__driver__api.html), which can be found in *zephyr/include/zephyr/drivers/sensor.h*. We will assign these functions to a *sensor_driver_api* struct to enforce the use of this template. While we could define our own structs, the use of such templates provide common patterns for application developers. In other words, all Zephyr *sensors* will work in similar ways.
+
+In particular, we will define the following public API functions:
+
+ * `sample_fetch` - The sensor takes a reading for the given channel (e.g. temperature, humidity, acceleration X, acceleration Y, etc.) and stores it in the `device` struct's `data` field.
+ * `channel_get` - Get the value of the desired channel that is currently stored in the `device->data` field.
+
+### API Assignment
+
+```c
+// Define the public API functions for the driver
+static const struct sensor_driver_api mcp9808_api_funcs = {
+	.sample_fetch = mcp9808_sample_fetch,
+	.channel_get = mcp9808_channel_get,
+};
+```
+
+After we've declared (and/or defined) our public-facing functions, we assign them to the various fields in the `sensor_driver_api` struct. In a minute, we'll use this API struct to create a *device* instance that can be called from our application code.
+
+### Devicetree Expansion Macro
+
+```c
+#define MCP9808_DEFINE(inst)                                        		   \
+																			   \
+	/* Create an instance of the data struct */								   \
+	static struct mcp9808_data mcp9808_data_##inst;                 		   \
+                                                                    		   \
+	/* Create an instance of the config struct and populate with DT values */  \
+	static const struct mcp9808_config mcp9808_config_##inst = {			   \
+		.i2c = I2C_DT_SPEC_INST_GET(inst),                          		   \
+		.resolution = DT_INST_PROP(inst, resolution),               		   \
+	};        																   \
+                                                                    		   \
+	/* Create a "device" instance from a Devicetree node identifier and */	   \
+	/* registers the init function to run during boot. */					   \
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, 										   \
+								 mcp9808_init, 								   \
+								 NULL, 										   \
+								 &mcp9808_data_##inst,						   \
+				     			 &mcp9808_config_##inst, 					   \
+								 POST_KERNEL,                       		   \
+				     			 CONFIG_SENSOR_INIT_PRIORITY, 				   \
+								 &mcp9808_api_funcs);	
+```
+
+This is the magic that connects our code to the Devicetree. So long as the `DT_DRV_COMPAT` macro has been defined prior, the Zephyr build system generates instance-based C code. It relies heavily on [macro token concatenation](https://gcc.gnu.org/onlinedocs/cpp/Concatenation.html), also known as *token pasting*.
+
+The Zephyr build system automatically assigns *instance* numbers to Devicetree nodes when there are multiple instances of that node under a parent node (e.g. multiple I2C devices under an I2C bus node). We will see this in action later.
+
+During this build process, the preprocessor takes that instance number and generates C code, defining the data, functions, etc. for that instance. For example, if we define an MCP9808 device in the Devicetree, the build system will assign it an instance number (e.g. 42). The preprocessor will then generate the code from this macro as follows:
+
+```c
+/* Create an instance of the data struct */
+static struct mcp9808_data mcp9808_data_42;
+
+/* Create an instance of the config struct and populate with DT values */
+static const struct mcp9808_config mcp9808_config_42 = {
+    .i2c = I2C_DT_SPEC_INST_GET(42),
+    .resolution = DT_INST_PROP(42, resolution),
+};
+
+/* Create a "device" instance from a Devicetree node identifier and */
+/* registers the init function to run during boot. */
+SENSOR_DEVICE_DT_INST_DEFINE(42,
+                             mcp9808_init,
+                             NULL,
+                             &mcp9808_data_42,
+                             &mcp9808_config_42,
+                             POST_KERNEL,
+                             CONFIG_SENSOR_INIT_PRIORITY,
+                             &mcp9808_api_funcs);
+```
+
+This macro is fed into the `FOREACH` macro as an argument:
+
+```c
+DT_INST_FOREACH_STATUS_OKAY(MCP9808_DEFINE)
+```
+
+This `FOREACH` macro tells the preprocessor to generate structs/functions for each instance found in the Devicetree (as long as its `status` property is set to `"okay"`).
 
 ## CMake Includes
+
+We need to tell the build system where to find the source files. As Zephyr relies on *CMake*, that involves creating a *CMakeLists.txt* file in each of the folders leading up to the actual *.h* and *.c* files.
+
+> **Note**: Zephyr defines a number of extra macros and functions that extend/customize CMake. You can find them in the [zephyr/cmake/modules/extensions.cmake](https://github.com/zephyrproject-rtos/zephyr/blob/main/cmake/modules/extensions.cmake) file. 
+
+Copy the following to ***workspace\modules\mcp9808\drivers\mcp9808\CMakeLists.txt***:
+
+```cmake
+# Declares the current directory as a Zephyr library
+# If no name is given, the name is derived from the directory name
+zephyr_library()
+
+# List the source code files for the library
+zephyr_library_sources(mcp9808.c)
+```
+
+Copy the following to ***workspace\modules\mcp9808\drivers\CMakeLists.txt***:
+
+```cmake
+# Custom Zephyr function that imports the mcp9808/ subdirectory if the Kconfig
+# option MCP9808 is defined
+add_subdirectory_ifdef(CONFIG_MCP9808 mcp9808)
+```
+
+Copy the following to ***workspace\modules\mcp9808\CMakeLists.txt***:
+
+```cmake
+# Include the required subdirectories
+add_subdirectory(drivers)
+
+# Add subdirectories to the compiler's include search path (.h files)
+zephyr_include_directories(drivers)
+```
 
 ## Kconfig Settings
 
 ## Zephyr Module
 
 ## Demo Application
+
+## Going Further
+
+This tutorial provided a wide overview (with example code) on how to create a device driver in Zephyr. There is a LOT going on, and it can be overwhelming. As a result, I highly recommend starting with existing drivers found in the Zephyr source code and diving deeper into the device driver model. Here are some additional resources I recommend to help you grapple device drivers:
+
+ * [Zephyr Official Documentation: Device Driver Model](https://docs.zephyrproject.org/latest/kernel/drivers/index.html)
+ * [Zephyr Official Documentation: Build System (CMake)](https://docs.zephyrproject.org/latest/build/cmake/index.html)
+ * [Martin Lampacher's Memfault Series on the Zephyr Devicetree](https://interrupt.memfault.com/authors/lampacher/)
+ * [Video: Mastering Zephyr Driver Development by Gerard Marull Paretas](https://www.youtube.com/watch?v=o-f2qCd2AXo)
 
 ## License
 
