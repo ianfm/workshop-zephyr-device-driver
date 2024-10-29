@@ -4,6 +4,8 @@ Welcome to the Zephyr Device Driver workshop! By the end of this workshop, you s
 
 > **Note**: Writing a device driver involves multiple tools, languages, and configuration file syntaxes. If this is your first time working with Kconfig and Devicetree, know that it will likely be overwhelming at first. This workshop will provide you with a barebones example and then point you to various resources should you wish to dive deeper into these concepts.
 
+> This workshop was tested with Zephyr RTOS v3.7.0.
+
 ## Table of Contents
 
 **%%%TODO**
@@ -189,6 +191,52 @@ python -m serial.tools.miniterm "<PORT>" 115200
 You should see the LED state printed to the console. Exit with *ctrl+]* (or *cmd+]* for macOS).
 
 ![Serial monitor for ESP32](.images/screen-esp32-serial.png)
+
+## Driver Directory Structure
+
+Drivers in Zephyr require a very particular directory structure, as the C compiler, CMake, Kconfig, and the Devicetree Compiler (DTC) browse through folders recursively looking for their respective source files. By default, Zephyr wants you to develop drivers and board Devicetree source (DTS) files "in-tree," which means inside the Zephyr RTOS source code repository (located at */opt/toolchains/zephyr* for this workshop).
+
+For large projects, this might make sense: you fork the main Zephyr repository and make the changes you need in the actual source code. You would then version control your fork of the Zephyr source code (e.g. with [west](https://docs.zephyrproject.org/latest/develop/west/index.html)). For learning purposes, this is a pain.
+
+We are going to develop our device driver "out-of-tree," which means it will be placed in a separate folder that we later tell CMake to find when building the project. This will help keep the application and driver folders free of clutter so you can see what's going on.
+
+To start, create the following directory and file structure in the */workspace/modules/* directory. You can do this with the VS Code instance or using `mkdir` and `touch` in the terminal. Folders end with '/' and files do not. We're just creating a skeleton right now: the files can be empty.
+
+```
+/workspace/
+|-- apps/
+|   `-- blink/
+|       `-- ...
+`-- modules/
+    |-- README.md
+    `-- mcp9808/
+        |-- CMakeLists.txt
+        |-- Kconfig
+        |-- drivers/
+        |   |-- CMakeLists.txt
+        |   |-- Kconfig
+        |   `-- mcp9808/
+        |       |-- CMakeLists.txt
+        |       |-- Kconfig
+        |       |-- mcp9808.c
+        |       `-- mcp9808.h
+        |-- dts/
+        |   `-- bindings/
+        |       `-- sensor/
+        |           `-- microchip,mcp9808.yaml
+        `-- zephyr/
+            `-- module.yaml
+```
+
+Some notes about the files and folder structure:
+
+ * We're keeping things separate: application code goes in *apps/* and driver code goes in *modules/*.
+ * The *CMakeLists.txt* files tell the CMake build system where to find the code for our driver.
+ * The *Kconfig* files create an entry in the Kconfig system that allows us to enable, disable, and configure our software components (i.e. the driver code).
+ * The *mcp9808.c* and *mcp9808.h* files hold our actual device driver code.
+ * The *microchip,mcp9808.yaml* file is our *Devicetree bindings* file. It is the glue that helps connect Devicetree settings (in DTS syntax) to our code (in C). It uses the [YAML syntax](https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html) and can end in *\*.yaml* or *\*.yml*. 
+ * The *dts/bindings/sensor/* naming and structure matters. During the build process, Zephyr looks for bindings files (\*.yaml) recursively in *dts/bindings/* folders in its *modules*.
+ * Speaking of modules, the *zephyr/module.yml* file formally declares this directory (*modules/mcp9808/*) as a Zephyr [module](https://docs.zephyrproject.org/latest/develop/modules.html) so it knows where to find the source, Kconfig, and bindings files. Once again, the folder and file name are important here: Zephyr looks for this particular file in this particular directory. It also uses the YAML syntax and must be named *module.yaml* or *module.yml*.
 
 ## Driver Source Code
 

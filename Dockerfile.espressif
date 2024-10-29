@@ -149,8 +149,7 @@ RUN cd /tmp && \
     bash install.sh --version ${VS_CODE_SERVER_VERSION}
 
 # Install CMake extensions
-RUN code-server --install-extension ms-vscode.cmake-tools && \
-    code-server --install-extension twxs.cmake
+RUN code-server --install-extension ms-vscode.cmake-tools
 
 # Download CMake and C/C++ extensions (code-server extension manager does not work well)
 RUN cd /tmp && \

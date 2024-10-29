@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/workspace/**",
+                "/opt/toolchains/zephyr/arch/**",
+                "/opt/toolchains/zephyr/boards/**",
+                "/opt/toolchains/zephyr/drivers/**",
+                "/opt/toolchains/zephyr/dts/**",
+                "/opt/toolchains/zephyr/include/**",
+                "/opt/toolchains/zephyr/kernel/**",
+                "/opt/toolchains/zephyr/lib/**",
+                "/opt/toolchains/zephyr/modules/**",
+                "/opt/toolchains/zephyr/subsys/**"
+            ],
+            "browse": {
+                "path": [
+                    "/workspace",
+                    "/opt/toolchains/zephyr"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
