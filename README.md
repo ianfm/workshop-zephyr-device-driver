@@ -240,6 +240,8 @@ Some notes about the files and folder structure:
 
 ## Driver Source Code
 
+After setting up the directory structure, we're going to write our actual driver. 
+
 ## Devicetree Configuration
 
 ## CMake Includes

@@ -1,11 +1,7 @@
 #ifndef ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
 #define ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
 
-#include <errno.h>
-#include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/i2c.h>
 
 // MCP9808 registers
 #define MCP9808_REG_CONFIG     0x01
