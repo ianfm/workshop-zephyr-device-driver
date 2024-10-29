@@ -662,6 +662,43 @@ zephyr_include_directories(drivers)
 
 ## Kconfig Settings
 
+[Kconfig](https://docs.zephyrproject.org/latest/build/kconfig/index.html) is a system for configuring various software components in Zephyr and is based on the Kconfig system used for Linux. Most notably, it is used to enable/disable components (like our MCP9808 driver) as well as set various parameters.
+
+We will define an "MCP9808" option in Kconfig that can be enabled to include the driver source code. This kind of module system helps keep the final application binary relatively small.
+
+Copy the following to ***workspace\modules\mcp9808\drivers\mcp9808\Kconfig***:
+
+```kconfig
+# Create a new option in menuconfig
+config MCP9808
+	bool "MCP9808 Temperature Sensor"
+	default n  		# Set the driver to be disabled by default
+	depends on I2C  # Make it dependent on I2C
+	help
+	  Enable driver for the MCP9808 temperature sensor. This driver
+	  depends on the I2C subsystem being enabled.
+```
+
+This creates a new option in our Kconfig system with the symbol *MCP9808*. The second line defines this as a boolean (with =y or =n as the only options). It also sets the default to `n` (disabled) and makes it depend on the I2C system being enabled.
+
+Copy the following to ***workspace\modules\mcp9808\drivers\Kconfig***:
+
+```kconfig
+rsource "mcp9808/Kconfig"
+```
+
+Like with CMake, we need to tell Kconfig where to find the relevant Kconfig files. This one says to look in the *relative* source (`rsource`) of the *mcp9808/* subdirectory for a file named *Kconfig*.
+
+Copy the following to ***workspace\modules\mcp9808\Kconfig***:
+
+```kconfig
+rsource "drivers/Kconfig"
+```
+
+This says to look in the *drivers/* subdirectory for a relevant *Kconfig* file.
+
+Together, these files help the Zephyr build system find new (or modifications to) Kconfig options relevant to our driver.
+
 ## Zephyr Module
 
 ## Demo Application
