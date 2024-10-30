@@ -29,12 +29,13 @@ Writing a device driver involves multiple tools, languages, and configuration fi
 - [Bindings File](#bindings-file)
 - [Zephyr Module](#zephyr-module)
 - [Demo Application](#demo-application)
-  - [CMakeLists.txt](#cmakelists)
-  - [prj.conf](#prj-conf)
-  - [boards/esp32s3_devkitc.overlay](#boards-esp32s3-devkitc-overlay)
-  - [src/main.c](#src-main-c)
+  - [CMakeLists.txt](#cmakeliststxt)
+  - [prj.conf](#prjconf)
+  - [boards/esp32s3_devkitc.overlay](#boardsesp32s3_devkitcoverlay)
+  - [src/main.c](#srcmainc)
 - [Build and Flash](#build-and-flash)
 - [Going Further](#going-further)
+- [Challenge](#challenge)
 - [License](#license)
 
 
@@ -76,7 +77,7 @@ You will need the following hardware components:
 
 ✅ Connect the components as follows, and connect the ESP32 dev kit to your computer.
 
-**%%%TODO: Fritzing image**
+![ESP32-S3-DevKit-C hardware connections](.images/esp32-s3-devkit-c-hardware-connections.png)
 
 ## Toolchain Installation
 
@@ -148,16 +149,16 @@ The Docker image includes all of the necessary Zephyr RTOS and SDK elements, the
 Linux/macOS:
 
 ```sh
-docker run --rm -it -p 8080:8080 -v "$(pwd)"/workspace:/workspace -w /workspace env-zephyr-espressif
+docker run --rm -it -p 8800:8800 -v "$(pwd)"/workspace:/workspace -w /workspace env-zephyr-espressif
 ```
 
 Windows:
 
 ```bat
-docker run --rm -it -p 8080:8080 -v "%cd%\workspace":/workspace -w /workspace env-zephyr-espressif
+docker run --rm -it -p 8800:8800 -v "%cd%\workspace":/workspace -w /workspace env-zephyr-espressif
 ```
 
-Leave that terminal window open, as it will act as our server. Open a browser on your host OS (verified working on Chrome) and navigate to [localhost:8080](http://localhost:8080/). It should connect to the container's server, and you should be presented with a VS Code instance.
+Leave that terminal window open, as it will act as our server. Open a browser on your host OS (verified working on Chrome) and navigate to [localhost:8800](http://localhost:8800/). It should connect to the container's server, and you should be presented with a VS Code instance.
 
 ### Interactive Container
 
@@ -1122,6 +1123,10 @@ python -m serial.tools.miniterm "<PORT>" 115200
 You should see the debugging information (`<dbg> MCP9808: mcp9808_init: Initializing`) printed once during boot followed by temperature data every second.
 
 ![Printing temperature data](.images/screen-temperature-output.png)
+
+## Challenge
+
+If you'd like to challenge yourself, try combining the *blink* and *read_temp* examples to create a simple threshold. If the temperature rises above some value (e.g. 27°C), have the LED turn on. Otherwise, turn the LED off. You will need to modify the Devicetree *overlay* file as well as make changes to the *src/main.c* code.
 
 ## Going Further
 
