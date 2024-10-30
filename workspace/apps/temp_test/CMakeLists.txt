@@ -1,5 +1,5 @@
 # Minimum CMake version
-cmake_minimum_required(VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.20.0)
 
 # Add additional modules
 set(ZEPHYR_EXTRA_MODULES "${CMAKE_SOURCE_DIR}/../../modules/mcp9808")

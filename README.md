@@ -194,38 +194,36 @@ You should see the LED state printed to the console. Exit with *ctrl+]* (or *cmd
 
 ## Driver Directory Structure
 
+> **Note**: The rest of this tutorial includes both actions you should perform and descriptions about the code. Actions will be marked with the ✅ icon. Feel free to skip the descriptions and come back to them later for in-depth explanations.
+
 Drivers in Zephyr require a very particular directory structure, as the C compiler, CMake, Kconfig, and the Devicetree Compiler (DTC) browse through folders recursively looking for their respective source files. By default, Zephyr wants you to develop drivers and board Devicetree source (DTS) files "in-tree," which means inside the Zephyr RTOS source code repository (located at */opt/toolchains/zephyr* for this workshop).
 
 For large projects, this might make sense: you fork the main Zephyr repository and make the changes you need in the actual source code. You would then version control your fork of the Zephyr source code (e.g. with [west](https://docs.zephyrproject.org/latest/develop/west/index.html)). For learning purposes, this is a pain.
 
 We are going to develop our device driver "out-of-tree," which means it will be placed in a separate folder that we later tell CMake to find when building the project. This will help keep the application and driver folders free of clutter so you can see what's going on.
 
-To start, create the following directory and file structure in the */workspace/modules/* directory. You can do this with the VS Code instance or using `mkdir` and `touch` in the terminal. Folders end with '/' and files do not. We're just creating a skeleton right now: the files can be empty.
+✅ To start, create the following directory and file structure in the */workspace/modules/* directory. You can do this with the VS Code instance or using `mkdir` and `touch` in the terminal. Folders end with `/` and files do not. We're just creating a skeleton right now: the files can be empty.
 
 ```
-/workspace/
-|-- apps/
-|   `-- blink/
-|       `-- ...
-`-- modules/
-    |-- README.md
-    `-- mcp9808/
-        |-- CMakeLists.txt
-        |-- Kconfig
-        |-- drivers/
-        |   |-- CMakeLists.txt
-        |   |-- Kconfig
-        |   `-- mcp9808/
-        |       |-- CMakeLists.txt
-        |       |-- Kconfig
-        |       |-- mcp9808.c
-        |       `-- mcp9808.h
-        |-- dts/
-        |   `-- bindings/
-        |       `-- sensor/
-        |           `-- microchip,mcp9808.yaml
-        `-- zephyr/
-            `-- module.yaml
+modules/
+├── README.md
+└── mcp9808/
+    ├── CMakeLists.txt
+    ├── Kconfig
+    ├── drivers/
+    │   ├── CMakeLists.txt
+    │   ├── Kconfig
+    │   └── mcp9808/
+    │       ├── CMakeLists.txt
+    │       ├── Kconfig
+    │       ├── mcp9808.c
+    │       └── mcp9808.h
+    ├── dts/
+    │   └── bindings/
+    │       └── sensor/
+    │           └── microchip,mcp9808.yaml
+    └── zephyr/
+        └── module.yaml
 ```
 
 Some notes about the files and folder structure:
@@ -244,7 +242,7 @@ Some notes about the files and folder structure:
 
 After setting up the directory structure, we're going to write our actual driver. Let's start with our header file.
 
-Copy the following to ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.h***:
+✅ Copy the following to ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.h***:
 
 ```c
 #ifndef ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
@@ -763,9 +761,57 @@ The first key-value pair specifies the `name` of the module: *mcp9808*. We then 
 
 You can read more about [Zephyr modules here](https://docs.zephyrproject.org/latest/develop/modules.html).
 
-With all that in place, we're ready to build our application!
-
 ## Demo Application
+
+With our module constructed, we're ready to write a simple application to test our device driver! Create the following directory and file structure for our *read_temp* application in the */workspace/apps/* directory (*blink/* shown for reference):
+
+```
+apps/
+├── blink/
+│   └── ...
+└── read_temp/
+    ├── CMakeLists.txt
+    ├── prj.conf
+    ├── boards/
+    │   └── esp32s3_devkitc.overlay
+    └── src/
+        └── main.c
+```
+
+Let's fill out these files and discuss their contents.
+
+### CMakeLists.txt
+
+Copy the following into ***workspace\apps\read_temp\CMakeLists.txt***:
+
+```cmake
+# Minimum CMake version
+cmake_minimum_required(VERSION 3.20.0)
+
+# Add additional modules
+set(ZEPHYR_EXTRA_MODULES "${CMAKE_SOURCE_DIR}/../../modules/mcp9808")
+
+# Locate the Zephyr RTOS source
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+
+# Name the project
+project(read_temp)
+
+# Locate the source code for the application
+target_sources(app PRIVATE src/main.c)
+```
+
+We first define the minimum required version of CMake. We derive this from other *CMakeLists.txt* files found in the Zephyr RTOS source code.
+
+Next, we tell Zephyr where to find our custom *mcp9808* module by setting the `ZEPHYR_EXTRA_MODULES` variable to the module's path. Zephyr will look at this variable during the build process.
+
+From there, we include the Zephyr RTOS source directory as a CMake package. If we configured Zephyr correctly, the `ZEPHYR_BASE` environment variable should be set in our OS. If not, we could use the path to the Zephyr directory instead.
+
+Finally, we name the project and tell CMake where to find our source code files.
+
+### prj.conf
+
+
 
 ## Going Further
 
