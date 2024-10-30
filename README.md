@@ -8,6 +8,8 @@ Writing a device driver involves multiple tools, languages, and configuration fi
 
 > This workshop was tested with Zephyr RTOS v3.7.0.
 
+> **Cheat mode**: if you want to skip to the solution, go [here](https://github.com/ShawnHymel/workshop-zephyr-device-driver/tree/solution). The device driver is in *workspace/modules/mcp9808/* and the example application is in *workspace/apps/read_temp/*.
+
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
