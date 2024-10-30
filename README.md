@@ -699,7 +699,71 @@ This says to look in the *drivers/* subdirectory for a relevant *Kconfig* file.
 
 Together, these files help the Zephyr build system find new (or modifications to) Kconfig options relevant to our driver.
 
+## Bindings File
+
+In order to connect the Devicetree settings to the driver source code so you can use it in your application, you need to create a *bindings* file. These files use the [YAML syntax](https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html) and create a specification for the various Devicetree properties that define the device.
+
+Copy the following to ***workspace\modules\mcp9808\dts\bindings\sensor\microchip,mcp9808.yaml***:
+
+```yaml
+# Description of the device
+description: Microchip MCP9808 temperature sensor
+
+# Compatibility string that matches the one in the Devicetree source and 
+# DT_DRV_COMPAT macro in the driver source code
+compatible: "microchip,mcp9808"
+
+# Includes common definitions from other bindings files
+#  - sensor-device.yaml - common sensor properties
+#  - i2c-device.yaml - common I2C communication properties
+include: [sensor-device.yaml, i2c-device.yaml]
+
+# Defines specific Devicetree properties of the MCP9808 sensor
+properties:
+  resolution:
+    type: int
+    default: 3
+    description: Sensor resolution. Default is 0.0625°C (3).
+    enum:
+      - 0 # 0.5°C
+      - 1 # 0.25°C
+      - 2 # 0.125°C
+      - 3 # 0.0625°C
+```
+
+The bindings file must define a `compatible` field. The Zephyr build system looks for this string when parsing the Devicetree source files to know what bindings (i.e. interface) to use for a given node and its associated properties. Note that the filename of the bindings file does not matter; it is this field that matters!
+
+We also include other bindings files here to enumerate common properties found in the *sensor* and *i2c-device* bindings.
+
+In this example, we define a custom *property* (`resolution`) in addition to the ones given by the *sensor-device* and *i2c-device* bindings. It's best to think about these bindings files as defining an interface for *nodes* in the Devicetree: it specifies the required properties, their types, possible defaults, and (optionally) acceptable values.
+
+Even though we specify these properties in YAML syntax, we will define Devicetree nodes in Devicetree source (DTS) syntax. You can read more about writing DTS files in [this helpful Zephyr guide](https://docs.zephyrproject.org/latest/build/dts/intro-syntax-structure.html).
+
 ## Zephyr Module
+
+We've created the required files that define the necessary device driver, at least according to what CMake, Kconfig, the Devicetree, and the compiler want. The final piece is telling Zephyr that it should treat all of these files and folders as a *module*. If we don't do this, Zephyr will fail to build and link to our driver code. Creating a Zephyr module is relatively straightforward: we just need a *zephyr/module.yaml* file in the top directory of our directory structure.
+
+Copy the following to ***workspace\modules\mcp9808\zephyr\module.yaml***:
+
+```yaml
+name: mcp9808
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .
+```
+
+The first key-value pair specifies the `name` of the module: *mcp9808*. We then specify how the module should be built with the `build` section:
+
+ * `cmake` - tells the Zephyr build system where to look for CMake files (relative to the module's root directory)
+ * `kconfig` - path to the *Kconfig* file in the module's root directory
+ * `settings` - additional settings that Zephyr should know about
+   * `dts_root` - Zephyr will look for a *dts/* directory at this location and search in there for additional Devicetree source (.dts) and bindings (.yaml, .yml) files
+
+You can read more about [Zephyr modules here](https://docs.zephyrproject.org/latest/develop/modules.html).
+
+With all that in place, we're ready to build our application!
 
 ## Demo Application
 
@@ -709,6 +773,7 @@ This tutorial provided a wide overview (with example code) on how to create a de
 
  * [Zephyr Official Documentation: Device Driver Model](https://docs.zephyrproject.org/latest/kernel/drivers/index.html)
  * [Zephyr Official Documentation: Build System (CMake)](https://docs.zephyrproject.org/latest/build/cmake/index.html)
+ * [Zephyr Official Documentation: Devicetree Bindings](https://docs.zephyrproject.org/latest/build/dts/bindings.html)
  * [Martin Lampacher's Memfault Series on the Zephyr Devicetree](https://interrupt.memfault.com/authors/lampacher/)
  * [Video: Mastering Zephyr Driver Development by Gerard Marull Paretas](https://www.youtube.com/watch?v=o-f2qCd2AXo)
 
