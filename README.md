@@ -2,13 +2,41 @@
 
 Welcome to the Zephyr Device Driver workshop! By the end of this workshop, you should have a broad overview of how a device driver is written, connected to the Devicetree, and then used in a simple example application.
 
-> **Note**: Writing a device driver involves multiple tools, languages, and configuration file syntaxes. If this is your first time working with Kconfig and Devicetree, know that it will likely be overwhelming at first. This workshop will provide you with a barebones example and then point you to various resources should you wish to dive deeper into these concepts.
+> **Note**: This tutorial includes actions and a lot of discussion about the code. Actions will be marked with the ✅ icon. Feel free to skip the descriptions and come back to them later for in-depth explanations.
+
+Writing a device driver involves multiple tools, languages, and configuration file syntaxes. If this is your first time working with Kconfig and Devicetree, know that it will likely be overwhelming at first. This workshop will provide you with a barebones example and then point you to various resources should you wish to dive deeper into these concepts.
 
 > This workshop was tested with Zephyr RTOS v3.7.0.
 
 ## Table of Contents
 
-**%%%TODO**
+- [Prerequisites](#prerequisites)
+- [Hardware Setup](#hardware-setup)
+- [Toolchain Installation](#toolchain-installation)
+  - [VS Code Server Setup (Recommended)](#vs-code-server-recommended)
+  - [Interactive Container](#interactive-container)
+- [Build and Flash the Blink Demo](#build-and-flash-the-blink-demo)
+- [Driver Directory Structure](#driver-directory-structure)
+- [Driver Header](#driver-header)
+- [Driver Source Code](#driver-source-code)
+  - [Compatible Driver Definition](#compatible-driver-definition)
+  - [Logging](#logging)
+  - [Functions](#functions)
+  - [API Assignment](#api-assignment)
+  - [Devicetree Expansion Macro](#devicetree-expansion-macro)
+- [CMake Includes](#cmake-includes)
+- [Kconfig Settings](#kconfig-settings)
+- [Bindings File](#bindings-file)
+- [Zephyr Module](#zephyr-module)
+- [Demo Application](#demo-application)
+  - [CMakeLists.txt](#cmakelists)
+  - [prj.conf](#prj-conf)
+  - [boards/esp32s3_devkitc.overlay](#boards-esp32s3-devkitc-overlay)
+  - [src/main.c](#src-main-c)
+- [Build and Flash](#build-and-flash)
+- [Going Further](#going-further)
+- [License](#license)
+
 
 ## Prerequisites
 
@@ -46,13 +74,13 @@ You will need the following hardware components:
  * [Solderless Breadboard](https://www.digikey.com/en/products/detail/dfrobot/FIT0096/7597069)
  * [USB A to Micro B Cable](https://www.digikey.com/en/products/detail/cvilux-usa/DH-20M50055/13175849)
 
-Connect the components as follows, and connect the ESP32 dev kit to your computer.
+✅ Connect the components as follows, and connect the ESP32 dev kit to your computer.
 
 **%%%TODO: Fritzing image**
 
 ## Toolchain Installation
 
-To start, download this repository somewhere on your computer (using `git` or direct download + unzip).
+✅ To start, download this repository somewhere on your computer (using `git` or direct download + unzip).
 
 [The Zephyr Project](https://zephyrproject.org/) is not like other IDEs or toolchains: it relies a wide collection of tools with a strong focus on Linux as the host operating system. Windows and macOS are both officially supported, but installing the toolchains on them can be burdensome.
 
@@ -66,13 +94,13 @@ To create a unified experience for this workshop, this tutorial demonstrates eve
 
 > **Note**: the instructions below were verified with Python 3.12 running on the host system. If one of the *pip install* steps fails, try installing exactly Python 3.12 and running the command again with `python3.12 -m pip install ...`
 
-Before you start, install the following programs on your computer:
+✅ Before you start, install the following programs on your computer:
 
  * (Windows) [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install)
  * [Docker Desktop](https://www.docker.com/products/docker-desktop/)
  * [Python](https://www.python.org/downloads/)
 
-Open a terminal, navigate to this directory, and install the following dependencies:
+✅ Open a terminal, navigate to this directory, and install the following dependencies:
 
 Linux/macOS:
 
@@ -92,6 +120,8 @@ venv\Scripts\activate
 python -m pip install pyserial==3.5 esptool==4.8.1
 ```
 
+✅ Load the Docker image using one of the following two options.
+
 **Option 1**: Build the Docker image (this will take some time):
 
 ```sh
@@ -109,11 +139,11 @@ docker load -i env-zephyr-espressif-<ARCH>.tar
 
 The Docker image includes all of the necessary Zephyr RTOS and SDK elements, the toolchain for building ESP32 applications, and a VS Code Server instance. As a result, you have a few options for interacting with the image: VS Code Server or Interactive Container. Choose one from below:
 
-### (Recommended) VS Code Server
+### VS Code Server (Recommended)
 
 > **Note**: The rest of this tutorial assumes you will be using this method.
 
-Open a terminal (or command prompt), navigate to this directory and run the Docker image:
+✅ Open a terminal (or command prompt), navigate to this directory and run the Docker image:
 
 Linux/macOS:
 
@@ -157,7 +187,7 @@ Before we start driver development, let's make sure we can build the basic blink
 > * ***/workspace*** is the shared directory between your host and container.
 > * ***/opt/toolchains/zephyr*** is the Zephyr RTOS source code. It is for reference only and should not be modified!
 
-Open a terminal in the VS Code client and build the project. Note that I'm using the [ESP32-S3-DevKitC](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html) as my target board. Feel free to change it to one of the [other ESP32 dev boards](https://docs.zephyrproject.org/latest/boards/index.html#vendor=espressif).
+✅ Open a terminal in the VS Code client and build the project. Note that I'm using the [ESP32-S3-DevKitC](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html) as my target board. Feel free to change it to one of the [other ESP32 dev boards](https://docs.zephyrproject.org/latest/boards/index.html#vendor=espressif).
 
 > **Note**: Whenever you see the root bash prompt (`#`), it means you should enter those commands into a terminal in the container (browser-based VS Code instance or root shell).
 
@@ -172,9 +202,12 @@ With some luck, the *blink* sample should build. Pay attention to any errors you
 
 The binary files will be in *workspace/apps/blink/build/zephyr*, which you can flash using [esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/).
 
-Connect the ESP32 board to your computer. In a new terminal on your **host computer**, activate the Python virtual environment (Linux/macOS: `source venv/bin/activate`, Windows: `venv\Scripts\activate`) if not done so already.
+✅ Connect a USB cable from your computer to the **UART** port on the ESP32-S3-DevKitC. In a new terminal on your **host computer**, activate the Python virtual environment (Linux/macOS: `source venv/bin/activate`, Windows: `venv\Scripts\activate`) if not done so already.
 
-Flash the binary to your board. For some ESP32 boards, you need to put it into bootloader by holding the *BOOTSEL* button and pressing the *RESET* button (or cycling power). Change `<PORT>` to the serial port for your ESP32 board (e.g. `/dev/ttyS0` for Linux, `/dev/tty.usbserial-1420` for macOS, `COM7` for Windows). You might also need to install a serial port driver, depending on the particular board.
+✅ Flash the binary to your board. For some ESP32 boards, you need to put it into bootloader by holding the *BOOTSEL* button and pressing the *RESET* button (or cycling power). Change `<PORT>` to the serial port for your ESP32 board (e.g. `/dev/ttyS0` for Linux, `/dev/tty.usbserial-1420` for macOS, `COM7` for Windows). You might also need to install a serial port driver, depending on the particular board.
+
+> **Important!** make sure to execute flashing and serial monitor programs from your **host OS** (not from within the Docker container)
+
 
 ```sh
 python -m esptool --port "<PORT>" --chip auto --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq 40m --flash_size detect 0x0 workspace/apps/blink/build/zephyr/zephyr.bin
@@ -182,7 +215,7 @@ python -m esptool --port "<PORT>" --chip auto --baud 921600 --before default_res
 
 ![Flash ESP32 dev board](.images/screen-flash-esp32.png)
 
-Open a serial port for debugging. Change `<PORT>` to the serial port for your ESP32 board.
+✅ Open a serial port for debugging (change `<PORT>` to the serial port for your ESP32 board):
 
 ```sh
 python -m serial.tools.miniterm "<PORT>" 115200
@@ -193,8 +226,6 @@ You should see the LED state printed to the console. Exit with *ctrl+]* (or *cmd
 ![Serial monitor for ESP32](.images/screen-esp32-serial.png)
 
 ## Driver Directory Structure
-
-> **Note**: The rest of this tutorial includes both actions you should perform and descriptions about the code. Actions will be marked with the ✅ icon. Feel free to skip the descriptions and come back to them later for in-depth explanations.
 
 Drivers in Zephyr require a very particular directory structure, as the C compiler, CMake, Kconfig, and the Devicetree Compiler (DTC) browse through folders recursively looking for their respective source files. By default, Zephyr wants you to develop drivers and board Devicetree source (DTS) files "in-tree," which means inside the Zephyr RTOS source code repository (located at */opt/toolchains/zephyr* for this workshop).
 
@@ -242,7 +273,7 @@ Some notes about the files and folder structure:
 
 After setting up the directory structure, we're going to write our actual driver. Let's start with our header file.
 
-✅ Copy the following to ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.h***:
+✅ Copy the following to ***modules/mcp9808/drivers/mcp9808/mcp9808.h***:
 
 ```c
 #ifndef ZEPHYR_DRIVERS_SENSOR_MICROCHIP_MCP9808_H_
@@ -288,7 +319,7 @@ The AMBIENT TEMPERATURE register (address 0x05) stores temperature data in 12-bi
 
 ## Driver Source Code
 
-Now, copy the following code into ***workspace/modules/mcp9808/drivers/mcp9808/mcp9808.c***:
+✅ Copy the following code into ***modules/mcp9808/drivers/mcp9808/mcp9808.c***:
 
 ```c
 // Ties to the 'compatible = "microchip,mcp9808"' node in the Devicetree
@@ -629,7 +660,7 @@ We need to tell the build system where to find the source files. As Zephyr relie
 
 > **Note**: Zephyr defines a number of extra macros and functions that extend/customize CMake. You can find them in the [zephyr/cmake/modules/extensions.cmake](https://github.com/zephyrproject-rtos/zephyr/blob/main/cmake/modules/extensions.cmake) file. 
 
-Copy the following to ***workspace\modules\mcp9808\drivers\mcp9808\CMakeLists.txt***:
+✅ Copy the following to ***modules/mcp9808/drivers/mcp9808/CMakeLists.txt***:
 
 ```cmake
 # Declares the current directory as a Zephyr library
@@ -640,7 +671,7 @@ zephyr_library()
 zephyr_library_sources(mcp9808.c)
 ```
 
-Copy the following to ***workspace\modules\mcp9808\drivers\CMakeLists.txt***:
+✅ Copy the following to ***modules/mcp9808/drivers/CMakeLists.txt***:
 
 ```cmake
 # Custom Zephyr function that imports the mcp9808/ subdirectory if the Kconfig
@@ -648,7 +679,7 @@ Copy the following to ***workspace\modules\mcp9808\drivers\CMakeLists.txt***:
 add_subdirectory_ifdef(CONFIG_MCP9808 mcp9808)
 ```
 
-Copy the following to ***workspace\modules\mcp9808\CMakeLists.txt***:
+✅ Copy the following to ***modules/mcp9808/CMakeLists.txt***:
 
 ```cmake
 # Include the required subdirectories
@@ -664,9 +695,9 @@ zephyr_include_directories(drivers)
 
 We will define an "MCP9808" option in Kconfig that can be enabled to include the driver source code. This kind of module system helps keep the final application binary relatively small.
 
-Copy the following to ***workspace\modules\mcp9808\drivers\mcp9808\Kconfig***:
+✅ Copy the following to ***modules/mcp9808/drivers/mcp9808/Kconfig***:
 
-```kconfig
+```conf
 # Create a new option in menuconfig
 config MCP9808
 	bool "MCP9808 Temperature Sensor"
@@ -679,17 +710,17 @@ config MCP9808
 
 This creates a new option in our Kconfig system with the symbol *MCP9808*. The second line defines this as a boolean (with =y or =n as the only options). It also sets the default to `n` (disabled) and makes it depend on the I2C system being enabled.
 
-Copy the following to ***workspace\modules\mcp9808\drivers\Kconfig***:
+✅ Copy the following to ***modules/mcp9808/drivers/Kconfig***:
 
-```kconfig
+```conf
 rsource "mcp9808/Kconfig"
 ```
 
 Like with CMake, we need to tell Kconfig where to find the relevant Kconfig files. This one says to look in the *relative* source (`rsource`) of the *mcp9808/* subdirectory for a file named *Kconfig*.
 
-Copy the following to ***workspace\modules\mcp9808\Kconfig***:
+✅ Copy the following to ***modules/mcp9808/Kconfig***:
 
-```kconfig
+```conf
 rsource "drivers/Kconfig"
 ```
 
@@ -701,7 +732,7 @@ Together, these files help the Zephyr build system find new (or modifications to
 
 In order to connect the Devicetree settings to the driver source code so you can use it in your application, you need to create a *bindings* file. These files use the [YAML syntax](https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html) and create a specification for the various Devicetree properties that define the device.
 
-Copy the following to ***workspace\modules\mcp9808\dts\bindings\sensor\microchip,mcp9808.yaml***:
+✅ Copy the following to ***modules/mcp9808/dts/bindings/sensor/microchip,mcp9808.yaml***:
 
 ```yaml
 # Description of the device
@@ -741,7 +772,7 @@ Even though we specify these properties in YAML syntax, we will define Devicetre
 
 We've created the required files that define the necessary device driver, at least according to what CMake, Kconfig, the Devicetree, and the compiler want. The final piece is telling Zephyr that it should treat all of these files and folders as a *module*. If we don't do this, Zephyr will fail to build and link to our driver code. Creating a Zephyr module is relatively straightforward: we just need a *zephyr/module.yaml* file in the top directory of our directory structure.
 
-Copy the following to ***workspace\modules\mcp9808\zephyr\module.yaml***:
+✅ Copy the following to ***modules/mcp9808/zephyr/module.yaml***:
 
 ```yaml
 name: mcp9808
@@ -763,7 +794,9 @@ You can read more about [Zephyr modules here](https://docs.zephyrproject.org/lat
 
 ## Demo Application
 
-With our module constructed, we're ready to write a simple application to test our device driver! Create the following directory and file structure for our *read_temp* application in the */workspace/apps/* directory (*blink/* shown for reference):
+With our module constructed, we're ready to write a simple application to test our device driver!
+
+✅ Create the following directory and file structure for our *read_temp* application in the */workspace/apps/* directory (*blink/* shown for reference):
 
 ```
 apps/
@@ -782,7 +815,7 @@ Let's fill out these files and discuss their contents.
 
 ### CMakeLists.txt
 
-Copy the following into ***workspace\apps\read_temp\CMakeLists.txt***:
+✅ Copy the following to ***apps/read_temp/CMakeLists.txt***:
 
 ```cmake
 # Minimum CMake version
@@ -809,9 +842,286 @@ From there, we include the Zephyr RTOS source directory as a CMake package. If w
 
 Finally, we name the project and tell CMake where to find our source code files.
 
+I recommend the following resources to learn more about CMake:
+
+ * [CMake's official tutorials](https://cmake.org/cmake/help/latest/guide/tutorial/index.html)
+ * [Zephyr Build System](https://docs.zephyrproject.org/latest/build/cmake/index.html)
+
 ### prj.conf
 
+✅ Copy the following to ***apps/read_temp/prj.conf***:
 
+```conf
+CONFIG_GPIO=y
+CONFIG_SENSOR=y
+CONFIG_I2C=y
+CONFIG_MCP9808=y
+CONFIG_LOG=y
+CONFIG_LOG_DEFAULT_LEVEL=4
+```
+
+As we saw earlier, Zephyr relies on the Kconfig system (borrowed from the [Linux Kconfig system](https://www.kernel.org/doc/html/v6.9/kbuild/kconfig-language.html)) to enable and disable various software components. Defining options, known as *symbols*, involves setting the symbol name (prefixed with `CONFIG_`) to one of the following value types:
+
+ * *Boolean* - `y` for enabled and `n` for disabled
+ * *Tristate* - `y`, `n`, or `m` for *loadable modules* (not used much in Zephyr, as modules are only included at build time)
+ * *Integer* - Integer value (like our `LOG_DEFAULT_LEVEL`)
+ * *Hex* - Similar to an integer but given in hexadecimal format (prefixed with `0x`)
+ * *String* - Free-form text input to specify a file path, device name, etc.
+
+Knowing which options to set can be tricky. Zephyr comes with [two interactive Kconfig interfaces](https://docs.zephyrproject.org/latest/build/kconfig/menuconfig.html) to help. *menuconfig* is the classic, command-line style interface while *guiconfig* is meant for graphical interfaces. As we are not running a full, windowed OS on our container, let's try *menuconfig*.
+
+> **Note**: You do not need to perform the following actions. We just want to demonstrate how you might find Kconfig options. We already set them for our project in *prj.conf*.
+
+In a terminal on your VS Code instance (inside the Docker container), navigate to the *apps/read_temp/* directory and build the project with the `-t menuconfig` option:
+
+```sh
+# west build -b esp32s3_devkitc/esp32s3/procpu -t menuconfig
+```
+
+Note that we need to specify a board (since it has not been set elsewhere) so that Zephyr knows how to set the default options. Since we are building our application for the *esp32s3_devkitc/esp32s3/procpu*, you can find the default configuration settings in *zephyr/boards/espressif/esp32s3_devkitc/*. In that directory, you'll find that *Kconfig.esp32s3_devkitc* specifies the *system-on-chip* (SOC) module found on the board (`ESP32S3_WROOM_N8`) and which processor we are targeting (`PROCPU` or `APPCPU`). The *esp32s3_devkitc_procpu_defconfig* file then adds or modifies the default values set by the SOC's Kconfig files.
+
+We also do not need any application code to run *menuconfig*--we just need a CMakeLists.txt file so that the build system knows where to find Zephyr and our custom module.
+
+You should be presented with a CLI-style graphical interface. Start a search by typing `/` and then enter `MCP9808`. You should see several options related to our MCP9808 driver.
+
+![Menuconfig search](.images/zephyr-kconfig-search.jpg)
+
+ * *DT_HAS_MICROCHIP_MCP9808* - automatically generated by Zephyr to indicate if the device's module is found on the project's Devicetree. As we have not created our *.overlay* file yet for this project to enable the device, this is (as expected) set to `n`.
+ * *MCP9808* - the actual driver module we created earlier. Make sure this is set to `y` (to match what we set in *prj.conf*)
+ * *ZEPHYR_MCP9808_MODULE* - Zephyr generates this symbol based on our module name (defined in */modules/mcp9808/zephyr/module.yaml*). It should be enabled (`y`) by default, and we can't change it manually.
+ * *menu "mcp9808 (/workspace/apps/read_temp/../../modules/mcp9808)"* - String containing "mcp9808" from our module's description
+
+Use the arrow keys to highlight *MCP9808* and press enter. You should see our custom module entry. You can enable and disable it by pressing the spacebar (`[ ]` for disabled, `[*]` for enabled).
+
+![Enable custom MCP9808 driver](.images/zephyr-mcp9808-module.jpg)
+
+Type `?` to view the module info. Here, you can see all the Kconfig options and descriptions we wrote in our *modules/mcp9808/drivers/mcp9808/Kconfig* file!
+
+![Custom MCP9808 driver info](.images/zephyr-mcp9808-module-info.jpg)
+
+Notice that our MCP9808 module depends on the I2C module. If you were to disable the I2C module, you would not be able to enable our module (you can't right now, as too many things depend on I2C).
+
+If you make any settings in menuconfig, you can save by pressing `s`. Note that menuconfig does not save changes in either the base Zephyr project (*/opt/toolchains/zephyr/*) or our *prj.conf* file. Rather, it saves them in *<APP_NAME>/build/zephyr/.config*. 
+
+Open *apps/read_temp/build/zephyr/.config*. You should see ALL of the Kconfig settings--everything pulled in from default Zephyr, our SOC, board, and *prj.conf*. Tracking down the location of each of these options can be tricky, as this file is compiled from dozens of various config files scattered throughout the Zephyr RTOS code, custom modules, and application settings. This is why we use a tool like *menuconfig*--it makes searching for and setting these options much easier.
+
+![Full .config file](.images/zephyr-config-file.jpg)
+
+The important thing to note here is that this file sits in our *build/* directory. This is fine if you don't often make changes to your application's build options, but as we've been building with the `-p always` option, this directory gets deleted/repopulated every time. That's not good: any changes we make with menuconfig will be lost when we build!
+
+There are a number of ways to save this .config file (usually by copying it out to your project folder). My preference is to find which options differ from the default board configuration and set them manually in *prj.conf*. Zephyr looks for a file with this name when building a project and updates the Kconfig options accordingly.
+
+You can read more about [Zephyr's Kconfig settings here](https://docs.zephyrproject.org/latest/build/kconfig/setting.html).
+
+### boards/esp32s3_devkitc.overlay
+
+Even though we enabled the software portion of our module, we still need to set up the Devicetree node so that our driver code knows how to communicate with the physical device. That means defining an I2C address, assigning SDA and SCL pins, and associating the device with a particular I2C bus.
+
+✅ Copy the following to ***apps/read_temp/boards/esp32s3_devkitc.overlay***:
+
+```dts
+// Create an alias for our MCP9808 device
+/ {
+    aliases {
+        my-mcp9808 = &mcp9808_18_i2c0;
+    };
+};
+
+// Add custom pins to the node labeled "pinctrl"
+&pinctrl {
+
+	// Configure custom pin settings for I2C bus 0
+    i2c0_custom_pins: i2c0_custom_pins {
+
+		// Custom group name
+        group1 {
+            pinmux = <I2C0_SDA_GPIO9>, <I2C0_SCL_GPIO10>;	// SDA on GPIO9, SCL on GPIO10
+            bias-pull-up; 									// Enable pull-up resistors for both pins
+            drive-open-drain; 								// Required for I2C
+            output-high; 									// Start with lines high (inactive state)
+        };
+    };
+};
+
+// Enable I2C0 and add MCP9808 sensor
+&i2c0 {
+    pinctrl-0 = <&i2c0_custom_pins>; 						// Use the custom pin configuration
+    status = "okay"; 										// Enable I2C0 interface
+
+	// Label: name of our device node
+    mcp9808_18_i2c0: mcp9808@18 {
+        compatible = "microchip,mcp9808"; 					// Specify device bindings/driver
+        reg = <0x18>; 										// I2C address of the MCP9808
+        status = "okay"; 									// Enable the MCP9808 sensor
+        resolution = <3>; 									// Set the resolution
+    };
+};
+```
+
+Zephyr uses the [Devicetree](https://docs.zephyrproject.org/latest/build/dts/index.html) to configure hardware (and some software) components when building a project. An *overlay* file is a supplementary source file that is used to modify or extend the existing Devicetree source (DTS) files, which are pulled in from various SOC, board, and Zephyr locations (much like the Kconfig files). This is where we set pins and configure our custom MCP9808 module.
+
+> **Note**: Devicetree syntax can be overwhelming at first. I recommend taking a look at [this guide](https://docs.zephyrproject.org/latest/build/dts/intro-syntax-structure.html) to learn more.
+
+Zephyr defines [aliases and chosen nodes](https://zephyr-docs.listenai.com/guides/dts/intro.html#aliases-and-chosen-nodes) in the root node (`/`) that make addressing other subnodes easier. We create an alias to our device node label so that we can easily access that node in our application code. We define the `mcp9808_18_i2c0` label later in the overlay file when we create our node. Note that *alias* names can only contain the characters `[0-9a-z-]`, which means no underscores! C does not like dashes in names, so when we access this alias from code, we'll need to replace the dash `-` with an underscore `_`.
+
+We then assign pins to a pin control group that we plan to use for our I2C bus. The `&` symbol says to access the node with the given label (e.g. `pinctrl`). This node is defined elsewhere for our board, and we just want to modify it.
+
+We create a node (with the syntax `label: node_name`) to group our I2C pins. In there, we define a custom group to configure our pins. We use the pin control names defined in *zephyr/include/zephyr/dt-bindings/pinctrl/esp32s3-pinctrl.h*. This is how the ESP32 assigns functions to pins in Zephyr (e.g. using pins for I2C or UART rather than basic GPIO). 
+
+The `&i2c0` is the label for our I2C bus 0 node on the Devicetree. The actual path is `/soc/i2c@60013000`, which denotes an I2C controller at memory address 0x60013000. This node is set by the SOC configuration. The label `i2c0` is easier to use and makes our code more portable to other processors.
+
+In this node, we overwrite the `pinctrl-0` property with our new custom pin configuration and then enable the I2C0 controller by setting `status = "okay";` (it is set to `"disabled"` by default). This is how we enable an I2C bus on the ESP32 with Zephyr: set the pins and set the status to `"okay"`.
+
+We then create a subnode with the name `mcp9808@18`. The `@18` is a *unit address*--it is optional, but it can help readers understand how a device is addressed on a bus. In this node, we define several *properties*:
+
+ * `compatible` - This required string tells Zephyr where to look for the related bindings and driver files
+ * `reg` - Required address of the device on the bus (our MCP9808's default I2C bus address is 0x18)
+ * `status` - Required to enable (`"okay"`) or disable (`"disabled"`) the device
+ * `resolution` - The custom property we defined in our driver to set the temperature resolution. This value is ultimately passed to the instanced code of our driver, which is then sent to the RESOLUTION register in the *init* function at boot time.
+
+Even though we do not have any application code, you can actually build your project:
+
+```sh
+# west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
+```
+
+Note that we pass our overlay file to the build system by setting the `DTC_OVERLAY_FILE` variable. West uses the parameter `--` is used to pass subsequent arguments to the underlyaing CMake system. So, `DTC_OVERLAY_FILE` is used by CMake rather than the overarching *west* system.
+
+Zephyr takes our overlay file and combines it with all of the other Devicetree source (.dts) and Devicetree source include (.dtsi) files it found for our SOC and board. It produces a combined DTS file at *apps/read_temp/build/zephyr/zephyr.dts*. If you open that file and search for "mcp9808," you should be able to find the custom node we created. Notice that it is a subnode of `i2c0`, as it is considered to be attached to that bus.
+
+![Combined DTS file](.images/zephyr-dts.jpg)
+
+During the build process, Zephyr creates C macros for all of these device nodes and properties. You can find them defined in *apps/read_temp/build/zephyr/include/generated/zephyr/devicetree_generated.h*. Search for "mcp9808" and you'll find the 100+ macros that Zephyr created.
+
+![Combined DTS file](.images/zephyr-dts-generated-macros.jpg)
+
+The macro naming scheme is based on navigating the Devicetree:
+
+ * `DT` - Devicetree
+ * `N` - node
+ * `S` - slash
+ * `P` - property
+
+From this, we can figure out the generated macro for our *resolution* property, which is found at `/soc/i2c@60013000/mcp9808@18{resolution=3}`. This would become `DT_N_S_soc_S_i2c_60013000_S_mcp9808_18_P_resolution` (`@` is not allowed in macro symbols, so it becomes an underscore `_`). Sure enough, if you search for that macro, you'll find it set to `3`.
+
+The other important macro is the `_ORD` macro (highlighted in the image) for our node. This is the *instance* number that Zephyr assigned to our node. Remember our macro magic in the driver code that expands based on each instance of the node? This is that *instance* number. For example, our data struct in the device driver would expand from `mcp9808_data_##inst` to `mcp9808_data_90`.
+
+While this seems like a lot of configuration, it helps create portable device drivers and application code. By making just a few changes to your Devicetree file (and maybe Kconfig), you can port your code to another processor! This is why you'll often see board-specific overlay files in the *boards/* folder of many projects. You can configure one application to build for several different boards.
+
+Zephyr has an [entire series of articles dedicated to the Devicetree](https://docs.zephyrproject.org/latest/build/dts/intro.html), which I highly recommend checking out.
+
+### src/main.c
+
+Finally, after all that configuration, we get to write our application code!
+
+✅ Copy the following to ***apps/read_temp/src/main.c***:
+
+```c
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/sensor.h>
+#include <stdio.h>
+
+int main(void)
+{
+	const struct device *const mcp = DEVICE_DT_GET(DT_ALIAS(my_mcp9808));
+	int rc;
+
+    // Check if the MCP9808 is found
+	if (mcp == NULL) {
+		printf("MCP9808 not found.\n");
+		return 0;
+	}
+
+    // Check if the MCP9808 has been initialized (init function called)
+	if (!device_is_ready(mcp)) {
+		printf("Device %s is not ready.\n", mcp->name);
+		return 0;
+	}
+
+    // Loop
+    while (1) 
+    {
+        struct sensor_value tmp;
+
+        // Fetch the temperature value from the sensor into the device's data structure
+        rc = sensor_sample_fetch(mcp);
+        if (rc != 0) {
+            printf("Sample fetch error: %d\n", rc);
+            return 0;
+        }
+
+        // Copy the temperature value from the device's data structure into the tmp struct
+        rc = sensor_channel_get(mcp, SENSOR_CHAN_AMBIENT_TEMP, &tmp);
+        if (rc != 0) {
+            printf("Channel get error: %d\n", rc);
+            return 0;
+        }
+
+        // Print the temperature value
+        printf("Temperature: %d.%06d\n", tmp.val1, tmp.val2);
+
+        // Sleep for 1 second
+        k_sleep(K_SECONDS(1));
+    }
+    
+    return 0;
+}
+```
+
+The code has been commented to help you understand what is happening. But, I'll call out a few important sections as it relates to our driver.
+
+We get a pointer to the instance of our *mcp9808* driver by using the `DEVICE_DT_GET()` macro. We pass it the value of `DT_ALIAS(my_mcp9808)`, which expands to our Devicetree node given by the alias `my-mcp9808`. Remember that Devicetree aliases cannot contain underscores, and C does not like dashes in macro names. So, Zephyr automatically provides this conversion for us. Also note that we are passing in a macro symbol (`my_mcp9808`) rather than a string (or other C native data type). Zephyr's macro magic uses this symbol to find the associated Devicetree node.
+
+This instance is returned as a *device* struct, which has certain properties defined by Zephyr. You can find this definition in *zephyr/include/zephyr/device.h*. Remember that our MCP9808 driver is a *sensor*, which is a type of *device*. Each of these classifications (sensor, device) provides certain definitions and interface requirements.
+
+Whenever we want to use this device, we call the related functions (whether they are *device* functions, *sensor* functions, or *mcp9808* functions) and pass in a pointer to our `mcp` device struct.
+
+> **Side note**: if this were C++, you'd call the member functions associated with that object. All this instancing macro magic is how Zephyr gets around object-oriented programming.
+
+For our setup code, we first make sure that our MCP9808 instance was found by the `DEVICE_DT_GET()` macro by checking to see if the pointer is `NULL`. We then make sure that `mcp9808_init()` was automatically called during the boot process by checking if `device_is_ready()`.
+
+If you recall from our device driver code, we only have two publically available functions: `sample_fetch` and `channel_get`. OK, we also have the functions, constants, and macros conferred to us by the [Device API](https://docs.zephyrproject.org/apidoc/latest/group__device__model.html) and [Sensor API](https://docs.zephyrproject.org/apidoc/latest/group__sensor__interface.html).
+
+> **Side note**: if you compared this to object-oriented programming, *mcp9808* would be a subclass of *sensor*, which would be a subclass of *device*.
+
+The *sensor* interface declares `sensor_sample_fetch()` and `sensor_channel_get()`. In our driver code, we assigned `mcp9808_sample_fetch()` and `mcp9808_channel_get()` to these functions respectively when we defined `struct sensor_driver_api mcp9808_api_funcs`. So, for example, when we call `sensor_sample_fetch()` in our application code, it actually calls `mcp9808_sample_fetch()` in our driver code.
+
+The basic pattern for working with sensors is to first *fetch* the sample, which causes the sensor to take a reading before storing the result in an internal variable (`dev->data`). You then *get* the channel information, which returns the data stored in `dev->data` for the specified channel (only *ambient tamperature* in our case).
+
+Finally, we print the value and wait 1 second before repeating.
+ 
+## Build and Flash
+
+✅ In the VS Code client, go to the *read_temp* application directory and build the project:
+
+```
+# cd apps/read_temp
+# west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
+```
+
+Pay attention to any errors you see.
+
+✅ Connect the ESP32 board to your computer (use the **UART** port on the ESP32). In a new terminal on your **host computer**, activate the Python virtual environment (Linux/macOS: `source venv/bin/activate`, Windows: `venv\Scripts\activate`) if not done so already.
+
+✅ Flash the binary to your board.
+
+> **Important!** make sure to execute flashing and serial monitor programs from your **host OS** (not from within the Docker container)
+
+
+```sh
+python -m esptool --port "<PORT>" --chip auto --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq 40m --flash_size detect 0x0 workspace/apps/read_temp/build/zephyr/zephyr.bin
+```
+
+✅ Open a serial port for debugging (change `<PORT>` to the serial port for your ESP32 board):
+
+```sh
+python -m serial.tools.miniterm "<PORT>" 115200
+```
+
+You should see the debugging information (`<dbg> MCP9808: mcp9808_init: Initializing`) printed once during boot followed by temperature data every second.
+
+![Printing temperature data](.images/screen-temperature-output.png)
 
 ## Going Further
 
@@ -822,6 +1132,8 @@ This tutorial provided a wide overview (with example code) on how to create a de
  * [Zephyr Official Documentation: Devicetree Bindings](https://docs.zephyrproject.org/latest/build/dts/bindings.html)
  * [Martin Lampacher's Memfault Series on the Zephyr Devicetree](https://interrupt.memfault.com/authors/lampacher/)
  * [Video: Mastering Zephyr Driver Development by Gerard Marull Paretas](https://www.youtube.com/watch?v=o-f2qCd2AXo)
+
+While we created an *out-of-tree* module, you could submit your device driver code to the main Zephyr RTOS repository. You'll want to follow all of the [contribution guidelines](https://docs.zephyrproject.org/latest/contribute/guidelines.html), including adding any necessary samples, tests, and documentation.
 
 ## License
 
