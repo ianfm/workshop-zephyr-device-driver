@@ -985,7 +985,7 @@ We then create a subnode with the name `mcp9808@18`. The `@18` is a *unit addres
 Even though we do not have any application code, you can actually build your project:
 
 ```sh
-# west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
+west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 ```
 
 Note that we pass our overlay file to the build system by setting the `DTC_OVERLAY_FILE` variable. West uses the parameter `--` is used to pass subsequent arguments to the underlyaing CMake system. So, `DTC_OVERLAY_FILE` is used by CMake rather than the overarching *west* system.
@@ -1099,8 +1099,8 @@ Finally, we print the value and wait 1 second before repeating.
 ✅ In the VS Code client, go to the *read_temp* application directory and build the project:
 
 ```
-# cd apps/read_temp
-# west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
+cd apps/read_temp
+west build -p always -b esp32s3_devkitc/esp32s3/procpu -- -DDTC_OVERLAY_FILE=boards/esp32s3_devkitc.overlay
 ```
 
 Pay attention to any errors you see.

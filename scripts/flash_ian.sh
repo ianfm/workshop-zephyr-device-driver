@@ -1,0 +1,2 @@
+python -m esptool --port "COM8" --chip auto --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq 40m --flash_size detect 0x0 workspace/apps/read_temp/build/zephyr/zephyr.bin
+python -m serial.tools.miniterm "COM8" 115200
